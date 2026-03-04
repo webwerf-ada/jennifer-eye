@@ -77,18 +77,17 @@ class JenniferEyeApp(rumps.App):
             orig_size = os.path.getsize(png_path)
             log.info(f"Screenshot opgeslagen: {png_path} ({orig_size} bytes)")
 
-            # Resize naar max 1440px breed + JPEG compressie voor kleinere payload
-            jpg_path = png_path + ".jpg"
+            # Resize naar max 1440px breed (blijft PNG)
+            resized_path = png_path + ".resized.png"
             subprocess.run(
-                ["sips", "--resampleWidth", "1440", "--setProperty", "format", "jpeg",
-                 "--setProperty", "formatOptions", "70", png_path, "--out", jpg_path],
+                ["sips", "--resampleWidth", "1440", png_path, "--out", resized_path],
                 capture_output=True,
             )
 
-            if os.path.exists(jpg_path) and os.path.getsize(jpg_path) > 0:
-                send_path = jpg_path
-                send_size = os.path.getsize(jpg_path)
-                log.info(f"Geresized: {orig_size} → {send_size} bytes (JPEG 70%)")
+            if os.path.exists(resized_path) and os.path.getsize(resized_path) > 0:
+                send_path = resized_path
+                send_size = os.path.getsize(resized_path)
+                log.info(f"Geresized: {orig_size} → {send_size} bytes (PNG 1440px)")
                 os.unlink(png_path)
             else:
                 send_path = png_path
