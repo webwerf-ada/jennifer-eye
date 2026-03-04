@@ -5,9 +5,10 @@ Menubar app voor macOS — stuur screenshots naar Jennifer met een beschrijving.
 ## Snel starten
 
 ```bash
-pip3 install rumps requests
-python3 jennifer_eye.py
+./run.sh
 ```
+
+Dit maakt automatisch een venv aan, installeert dependencies, en start de app.
 
 Het 👁️ icoontje verschijnt in je menubar. Klik erop voor:
 - **Screenshot naar Jennifer** — volledig scherm
@@ -18,8 +19,9 @@ Je krijgt een tekstveld waar je beschrijft wat je wilt weten. Jennifer analyseer
 ## Als .app bouwen (optioneel)
 
 ```bash
-pip3 install py2app
-python3 setup.py py2app
+source .venv/bin/activate
+pip install py2app
+python setup.py py2app
 ```
 
 De app verschijnt in `dist/Jennifer Eye.app`. Sleep naar Applications en voeg toe aan Login Items voor auto-start.
@@ -27,6 +29,6 @@ De app verschijnt in `dist/Jennifer Eye.app`. Sleep naar Applications en voeg to
 ## Vereisten
 
 - macOS
-- Python 3
+- Python 3 (via Homebrew of system)
 - Tailscale (verbinding met openclaw-vm)
 - Screen Recording permissie (macOS vraagt dit automatisch)
