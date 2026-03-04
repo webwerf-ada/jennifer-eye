@@ -2,14 +2,6 @@
 """
 Jennifer Eye 👁️ — Menubar app voor macOS
 Maakt een screenshot, vraagt een beschrijving, stuurt het naar Jennifer.
-
-Installatie:
-    pip3 install rumps requests
-    python3 jennifer_eye.py
-
-Of maak er een .app van:
-    pip3 install py2app
-    python3 setup.py py2app
 """
 
 import rumps
@@ -18,12 +10,30 @@ import tempfile
 import base64
 import json
 import os
-import requests
+import logging
 import threading
+from datetime import datetime
+
+import requests
 
 # === CONFIGURATIE ===
 HOOK_URL = "https://openclaw-vm.tail66c752.ts.net/hooks/screenshot"
 HOOK_TOKEN = "07406efaf9b4bf6cc1b31ce51c4eb91daa03a9029db013ac4f1b701f741eeced"
+
+# === LOGGING ===
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "jennifer-eye.log")
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger("jennifer-eye")
 
 
 class JenniferEyeApp(rumps.App):
@@ -34,9 +44,13 @@ class JenniferEyeApp(rumps.App):
             rumps.MenuItem("📸 Selectie naar Jennifer", callback=self.take_selection),
             None,  # separator
         ]
+        log.info("Jennifer Eye gestart")
 
     def _capture_and_send(self, selection=False):
         """Screenshot maken en versturen."""
+        mode = "selectie" if selection else "volledig scherm"
+        log.info(f"Screenshot starten ({mode})")
+
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
 
@@ -47,10 +61,22 @@ class JenniferEyeApp(rumps.App):
                 cmd.append("-i")  # interactieve selectie
             cmd.append(tmp.name)
 
-            result = subprocess.run(cmd, capture_output=True)
-            if result.returncode != 0 or not os.path.exists(tmp.name) or os.path.getsize(tmp.name) == 0:
+            log.debug(f"Commando: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            log.debug(f"screencapture returncode: {result.returncode}")
+
+            if result.returncode != 0:
+                log.warning(f"screencapture failed: {result.stderr}")
+                rumps.notification("Jennifer Eye", "Fout", f"screencapture mislukt: {result.stderr}")
+                return
+
+            if not os.path.exists(tmp.name) or os.path.getsize(tmp.name) == 0:
+                log.info("Screenshot geannuleerd (leeg bestand)")
                 rumps.notification("Jennifer Eye", "Geannuleerd", "Geen screenshot gemaakt.")
                 return
+
+            file_size = os.path.getsize(tmp.name)
+            log.info(f"Screenshot opgeslagen: {tmp.name} ({file_size} bytes)")
 
             # Beschrijving vragen
             response = rumps.Window(
@@ -63,28 +89,36 @@ class JenniferEyeApp(rumps.App):
             ).run()
 
             if not response.clicked:
+                log.info("Gebruiker heeft geannuleerd")
                 rumps.notification("Jennifer Eye", "Geannuleerd", "Screenshot niet verstuurd.")
                 return
 
             text = response.text.strip() or "(geen beschrijving)"
+            log.info(f"Beschrijving: {text}")
 
             # Versturen in achtergrond
             threading.Thread(target=self._send, args=(tmp.name, text), daemon=True).start()
 
         except Exception as e:
+            log.exception(f"Fout bij screenshot: {e}")
             rumps.notification("Jennifer Eye", "Fout", str(e))
 
     def _send(self, filepath, text):
         """Screenshot naar Jennifer sturen via webhook."""
         try:
+            file_size = os.path.getsize(filepath)
+            log.info(f"Bezig met versturen... ({file_size} bytes)")
+
             with open(filepath, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
 
-            payload = {"text": text, "image": image_data}
+            payload_size = len(image_data)
+            log.debug(f"Base64 payload: {payload_size} chars")
 
+            log.info(f"POST naar {HOOK_URL}")
             resp = requests.post(
                 HOOK_URL,
-                json=payload,
+                json={"text": text, "image": image_data},
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {HOOK_TOKEN}",
@@ -92,16 +126,26 @@ class JenniferEyeApp(rumps.App):
                 timeout=30,
             )
 
+            log.info(f"Response: HTTP {resp.status_code} — {resp.text[:200]}")
+
             if resp.ok:
                 rumps.notification(
                     "Jennifer Eye 👁️",
                     "Verstuurd!",
-                    f"Jennifer kijkt mee: \"{text[:50]}...\"" if len(text) > 50 else f"Jennifer kijkt mee: \"{text}\"",
+                    f"Jennifer kijkt mee: \"{text[:50]}\"",
                 )
             else:
+                log.error(f"Server error: {resp.status_code} {resp.text}")
                 rumps.notification("Jennifer Eye", "Fout", f"HTTP {resp.status_code}: {resp.text[:100]}")
 
+        except requests.exceptions.ConnectionError as e:
+            log.error(f"Verbindingsfout (Tailscale aan?): {e}")
+            rumps.notification("Jennifer Eye", "Verbindingsfout", "Kan server niet bereiken. Staat Tailscale aan?")
+        except requests.exceptions.Timeout:
+            log.error("Timeout bij versturen")
+            rumps.notification("Jennifer Eye", "Timeout", "Server reageerde niet binnen 30s.")
         except Exception as e:
+            log.exception(f"Onverwachte fout bij versturen: {e}")
             rumps.notification("Jennifer Eye", "Verzenden mislukt", str(e))
         finally:
             try:
@@ -119,4 +163,7 @@ class JenniferEyeApp(rumps.App):
 
 
 if __name__ == "__main__":
+    log.info(f"=== Jennifer Eye start {datetime.now().isoformat()} ===")
+    log.info(f"Hook URL: {HOOK_URL}")
+    log.info(f"Log file: {LOG_FILE}")
     JenniferEyeApp().run()
