@@ -51,15 +51,14 @@ class JenniferEyeApp(rumps.App):
         mode = "selectie" if selection else "volledig scherm"
         log.info(f"Screenshot starten ({mode})")
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        tmp.close()
+        png_path = tempfile.mktemp(suffix=".png")
 
         try:
             # Screenshot maken
             cmd = ["screencapture"]
             if selection:
-                cmd.append("-i")  # interactieve selectie
-            cmd.append(tmp.name)
+                cmd.append("-i")
+            cmd.append(png_path)
 
             log.debug(f"Commando: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -70,13 +69,31 @@ class JenniferEyeApp(rumps.App):
                 rumps.notification("Jennifer Eye", "Fout", f"screencapture mislukt: {result.stderr}")
                 return
 
-            if not os.path.exists(tmp.name) or os.path.getsize(tmp.name) == 0:
+            if not os.path.exists(png_path) or os.path.getsize(png_path) == 0:
                 log.info("Screenshot geannuleerd (leeg bestand)")
                 rumps.notification("Jennifer Eye", "Geannuleerd", "Geen screenshot gemaakt.")
                 return
 
-            file_size = os.path.getsize(tmp.name)
-            log.info(f"Screenshot opgeslagen: {tmp.name} ({file_size} bytes)")
+            orig_size = os.path.getsize(png_path)
+            log.info(f"Screenshot opgeslagen: {png_path} ({orig_size} bytes)")
+
+            # Resize naar max 1440px breed + JPEG compressie voor kleinere payload
+            jpg_path = png_path + ".jpg"
+            subprocess.run(
+                ["sips", "--resampleWidth", "1440", "--setProperty", "format", "jpeg",
+                 "--setProperty", "formatOptions", "70", png_path, "--out", jpg_path],
+                capture_output=True,
+            )
+
+            if os.path.exists(jpg_path) and os.path.getsize(jpg_path) > 0:
+                send_path = jpg_path
+                send_size = os.path.getsize(jpg_path)
+                log.info(f"Geresized: {orig_size} → {send_size} bytes (JPEG 70%)")
+                os.unlink(png_path)
+            else:
+                send_path = png_path
+                send_size = orig_size
+                log.warning("Resize mislukt, origineel gebruiken")
 
             # Beschrijving vragen
             response = rumps.Window(
@@ -97,7 +114,7 @@ class JenniferEyeApp(rumps.App):
             log.info(f"Beschrijving: {text}")
 
             # Versturen in achtergrond
-            threading.Thread(target=self._send, args=(tmp.name, text), daemon=True).start()
+            threading.Thread(target=self._send, args=(send_path, text), daemon=True).start()
 
         except Exception as e:
             log.exception(f"Fout bij screenshot: {e}")
