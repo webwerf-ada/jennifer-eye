@@ -6,6 +6,7 @@ Maakt een screenshot, vraagt een beschrijving, stuurt het naar Jennifer.
 
 import rumps
 import subprocess
+import AppKit
 import tempfile
 import base64
 import json
@@ -93,6 +94,9 @@ class JenniferEyeApp(rumps.App):
                 send_path = png_path
                 send_size = orig_size
                 log.warning("Resize mislukt, origineel gebruiken")
+
+            # Focus pakken zodat het dialoogvenster bovenaan komt
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
 
             # Beschrijving vragen
             response = rumps.Window(
