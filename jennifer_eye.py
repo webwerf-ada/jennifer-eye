@@ -95,8 +95,14 @@ class JenniferEyeApp(rumps.App):
                 send_size = orig_size
                 log.warning("Resize mislukt, origineel gebruiken")
 
-            # Focus pakken zodat het dialoogvenster bovenaan komt
-            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            # Focus pakken zodat het dialoogvenster bovenaan komt (na screencapture/selectie)
+            import time
+            time.sleep(0.3)
+            app = AppKit.NSApplication.sharedApplication()
+            app.activateIgnoringOtherApps_(True)
+            # Extra: breng alle windows naar voren
+            for window in app.windows():
+                window.makeKeyAndOrderFront_(None)
 
             # Beschrijving vragen
             response = rumps.Window(
