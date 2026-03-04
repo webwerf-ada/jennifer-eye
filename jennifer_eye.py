@@ -17,7 +17,7 @@ from datetime import datetime
 import requests
 
 # === CONFIGURATIE ===
-HOOK_URL = "https://openclaw-vm.tail66c752.ts.net/hooks/screenshot"
+HOOK_URL = "https://jennifer.code42.nl/hooks/screenshot"
 HOOK_TOKEN = "07406efaf9b4bf6cc1b31ce51c4eb91daa03a9029db013ac4f1b701f741eeced"
 
 # === LOGGING ===
